@@ -1,10 +1,9 @@
 #!/bin/sh
 set -e
 
-# Configuration — override these via environment or edit before hosting.
-BINARY_NAME="${BINARY_NAME:-mycli}"
-DOWNLOAD_BASE="${DOWNLOAD_BASE:-https://github.com/hedwigai/cli/releases/latest/download}"
-TOKEN_ENV_VAR="${TOKEN_ENV_VAR:-MYCLI_TOKEN}"
+BINARY_NAME="${BINARY_NAME:-hai}"
+DOWNLOAD_BASE="${DOWNLOAD_BASE:-https://github.com/un-seen/cli-app/releases/latest/download}"
+TOKEN_ENV_VAR="${TOKEN_ENV_VAR:-HEDWIGAI_AUTH_TOKEN}"
 
 # Detect OS.
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
