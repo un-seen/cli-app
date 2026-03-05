@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,12 +14,11 @@ import (
 )
 
 func main() {
-	configPath := "config.yaml"
-	if len(os.Args) > 1 {
-		configPath = os.Args[1]
-	}
+	configPath := flag.String("config", "configs/hai.yaml", "path to config YAML")
+	outputDir := flag.String("output-dir", "generated", "output directory")
+	flag.Parse()
 
-	cfg, err := config.Load(configPath)
+	cfg, err := config.Load(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Build error: %v\n", err)
 		os.Exit(1)
@@ -66,7 +66,7 @@ func main() {
 		BinaryName: cfg.BinaryName,
 	}
 
-	if err := codegen.Generate(input, "generated"); err != nil {
+	if err := codegen.Generate(input, *outputDir); err != nil {
 		fmt.Fprintf(os.Stderr, "Build error: %v\n", err)
 		os.Exit(1)
 	}

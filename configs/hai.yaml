@@ -1,0 +1,15 @@
+binary_name: hai
+version: 0.1.0
+
+auth:
+  env_var: HEDWIGAI_AUTH_TOKEN
+
+specs:
+  x: "https://toolkit.hedwigai.com/x/openapi.json"
+  spider: "https://toolkit.hedwigai.com/spider/openapi.json"
+  instagram: "https://toolkit.hedwigai.com/instagram/openapi.json"
+  linkedin: "https://toolkit.hedwigai.com/linkedin/openapi.json"
+  drive: "https://kgraph.hedwigai.com/drive/openapi.json"
+  vault: "https://kgraph.hedwigai.com/vault/openapi.json"
+  document: "https://kgraph.hedwigai.com/document/openapi.json"
+

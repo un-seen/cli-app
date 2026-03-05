@@ -6,7 +6,7 @@ import (
 	"github.com/hedwigai/cli/internal/command"
 )
 
-//go:generate go run ./tools/generate
+//go:generate go run ./tools/generate -config=configs/hai.yaml
 
 // Set via ldflags at build time.
 var (

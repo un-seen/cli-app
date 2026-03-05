@@ -1,9 +1,10 @@
 #!/bin/sh
 set -e
 
-BINARY_NAME="${BINARY_NAME:-hai}"
-DOWNLOAD_BASE="${DOWNLOAD_BASE:-https://github.com/un-seen/cli-app/releases/latest/download}"
-TOKEN_ENV_VAR="${TOKEN_ENV_VAR:-HEDWIGAI_AUTH_TOKEN}"
+BINARY_NAME="__BINARY_NAME__"
+DOWNLOAD_BASE="__DOWNLOAD_BASE__"
+TOKEN_ENV_VAR="__TOKEN_ENV_VAR__"
+CONFIG_ID="__CONFIG_ID__"
 
 # Detect OS.
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -27,7 +28,7 @@ case "$ARCH" in
     ;;
 esac
 
-BINARY="${BINARY_NAME}-${OS}-${ARCH}"
+BINARY="${CONFIG_ID}-${OS}-${ARCH}"
 URL="${DOWNLOAD_BASE}/${BINARY}"
 CHECKSUM_URL="${DOWNLOAD_BASE}/checksums.txt"
 
