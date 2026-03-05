@@ -89,7 +89,7 @@ func addTagCommands(parent *cobra.Command, group *defs.SpecGroup) {
 
 	// If there is only one tag and it matches the parent (group) name,
 	// add operations directly to the parent to avoid redundant nesting.
-	if len(tags) == 1 && tags[0] == parent.Use {
+	if len(tags) == 1 && strings.EqualFold(tags[0], parent.Use) {
 		for _, op := range tagOps[tags[0]] {
 			parent.AddCommand(buildOperationCommand(op, group))
 		}
