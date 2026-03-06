@@ -10,6 +10,7 @@ import (
 
 	"github.com/hedwigai/cli/generated"
 	"github.com/hedwigai/cli/internal/defs"
+	"github.com/hedwigai/cli/internal/mcpbridge"
 )
 
 var (
@@ -53,6 +54,44 @@ func buildRootCommand() *cobra.Command {
 			fmt.Printf("%s version %s (commit %s)\n", generated.BinaryName, version, commitHash)
 		},
 	})
+
+	// MCP commands.
+	mcpCmd := &cobra.Command{
+		Use:   "mcp",
+		Short: "MCP server commands",
+	}
+
+	var mcpPort int
+	var mcpStdio bool
+
+	serverCmd := &cobra.Command{
+		Use:   "server",
+		Short: "Start MCP server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if mcpStdio {
+				return mcpbridge.ServeStdio(generated.BinaryName, version,
+					generated.SpecGroups, generated.AuthEnvVar)
+			}
+			return mcpbridge.ServeHTTP(generated.BinaryName, version,
+				generated.SpecGroups, generated.AuthEnvVar, mcpPort)
+		},
+	}
+	serverCmd.Flags().IntVar(&mcpPort, "port", 8080, "HTTP port")
+	serverCmd.Flags().BoolVar(&mcpStdio, "stdio", false, "Use stdio transport instead of HTTP")
+	mcpCmd.AddCommand(serverCmd)
+
+	mcpCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List available MCP tools",
+		Run: func(cmd *cobra.Command, args []string) {
+			tools := mcpbridge.ListTools(generated.SpecGroups)
+			for _, t := range tools {
+				fmt.Printf("%-12s %-40s %s\n", t.Group, t.Name, t.Description)
+			}
+		},
+	})
+
+	rootCmd.AddCommand(mcpCmd)
 
 	groups := generated.SpecGroups
 	singleSpec := len(groups) == 1
