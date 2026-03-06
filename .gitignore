@@ -4,6 +4,9 @@ hai
 # Binaries & dist
 dist/
 
+# Generated code (rebuilt per config via make)
+generated/
+
 # Spec cache
 .cache/
 
