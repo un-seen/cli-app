@@ -1,5 +1,2 @@
-[build]
-buildCommand = "go run ./tools/generate -config=configs/hai.yaml -output-dir=generated && go build -ldflags='-s -w' -trimpath -o out ."
-
 [deploy]
 startCommand = "./out mcp server"
