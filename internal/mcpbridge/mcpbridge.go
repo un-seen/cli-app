@@ -92,14 +92,22 @@ func ServeHTTP(binaryName, version string, groups []defs.SpecGroup, authEnvVar s
 		server.WithSSEContextFunc(extractBearerToken),
 	)
 
+	identityBaseURL := getIdentityBaseURL()
+	mcpBaseURL := getMCPBaseURL()
+
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", streamableSrv)
-	mux.Handle("/sse", sseSrv.SSEHandler())
-	mux.Handle("/message", sseSrv.MessageHandler())
+	// OAuth metadata discovery (unauthenticated — bootstraps the auth flow).
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server", oauthMetadataHandler(identityBaseURL))
+	// MCP transports wrapped with auth middleware.
+	mux.Handle("/mcp", authMiddleware(mcpBaseURL, streamableSrv))
+	mux.Handle("/sse", authMiddleware(mcpBaseURL, sseSrv.SSEHandler()))
+	mux.Handle("/message", authMiddleware(mcpBaseURL, sseSrv.MessageHandler()))
 
 	fmt.Fprintf(os.Stderr, "MCP server listening on %s\n", addr)
 	fmt.Fprintf(os.Stderr, "  Streamable HTTP: POST /mcp\n")
 	fmt.Fprintf(os.Stderr, "  Legacy SSE:      GET  /sse + POST /message\n")
+	fmt.Fprintf(os.Stderr, "  OAuth metadata:  GET  /.well-known/oauth-authorization-server\n")
+	fmt.Fprintf(os.Stderr, "  Identity URL:    %s\n", identityBaseURL)
 	return http.ListenAndServe(addr, mux)
 }
 
