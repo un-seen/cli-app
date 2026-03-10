@@ -5,9 +5,5 @@ auth:
   env_var: HEDWIGAI_AUTH_TOKEN
 
 specs:
-  x: "https://toolkit.hedwigai.com/x/openapi.json"
-  spider: "https://toolkit.hedwigai.com/spider/openapi.json"
-  instagram: "https://toolkit.hedwigai.com/instagram/openapi.json"
-  linkedin: "https://toolkit.hedwigai.com/linkedin/openapi.json"
   portal: "https://portal.hedwigai.com/api/openapi.json"
   googledrive: "https://kgraph.hedwigai.com/shared/googledrive/openapi.json"
