@@ -3,7 +3,7 @@
   "steps": {
     "build": {
       "commands": [
-        "go run ./tools/generate -config=configs/hai.yaml -output-dir=generated",
+        "go run ./tools/generate -config=configs/admin.yaml -output-dir=generated",
         "..."
       ]
     }

@@ -63,6 +63,7 @@ func buildRootCommand() *cobra.Command {
 
 	var mcpPort int
 	var mcpStdio bool
+	var mcpConfigDir string
 
 	serverCmd := &cobra.Command{
 		Use:   "server",
@@ -72,12 +73,21 @@ func buildRootCommand() *cobra.Command {
 				return mcpbridge.ServeStdio(generated.BinaryName, version,
 					generated.SpecGroups, generated.AuthEnvVar)
 			}
+			if mcpConfigDir != "" {
+				instances, err := mcpbridge.LoadInstancesFromDir(mcpConfigDir)
+				if err != nil {
+					return fmt.Errorf("loading configs from %s: %w", mcpConfigDir, err)
+				}
+				return mcpbridge.ServeMultiHTTP(instances, version, mcpPort)
+			}
 			return mcpbridge.ServeHTTP(generated.BinaryName, version,
 				generated.SpecGroups, generated.AuthEnvVar, mcpPort)
 		},
 	}
 	serverCmd.Flags().IntVar(&mcpPort, "port", 8080, "HTTP port")
 	serverCmd.Flags().BoolVar(&mcpStdio, "stdio", false, "Use stdio transport instead of HTTP")
+	serverCmd.Flags().StringVar(&mcpConfigDir, "config-dir", "",
+		"Directory of config YAML files (serves one MCP server per config)")
 	mcpCmd.AddCommand(serverCmd)
 
 	mcpCmd.AddCommand(&cobra.Command{

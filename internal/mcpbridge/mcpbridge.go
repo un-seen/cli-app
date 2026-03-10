@@ -55,17 +55,8 @@ func extractBearerToken(ctx context.Context, r *http.Request) context.Context {
 	return ctx
 }
 
-// ServeHTTP starts an HTTP server serving both transports:
-//   - Streamable HTTP at /mcp  (Claude Code, newer clients)
-//   - Legacy SSE at /sse + /message  (Claude Desktop, older clients)
-//
-// Clients authenticate by passing their token in the Authorization header.
-func ServeHTTP(binaryName, version string, groups []defs.SpecGroup, authEnvVar string, port int) error {
-	// Use PORT env var if set (Railway, Render, etc.), otherwise use flag value.
-	if envPort := os.Getenv("PORT"); envPort != "" {
-		fmt.Sscanf(envPort, "%d", &port)
-	}
-
+// createMCPServer builds an MCP server with all tools from the given groups.
+func createMCPServer(binaryName, version, authEnvVar string, groups []defs.SpecGroup) *server.MCPServer {
 	s := server.NewMCPServer(binaryName+"-mcp", version, server.WithToolCapabilities(false))
 	for i := range groups {
 		group := &groups[i]
@@ -78,6 +69,21 @@ func ServeHTTP(binaryName, version string, groups []defs.SpecGroup, authEnvVar s
 			})
 		}
 	}
+	return s
+}
+
+// ServeHTTP starts an HTTP server serving both transports:
+//   - Streamable HTTP at /mcp  (Claude Code, newer clients)
+//   - Legacy SSE at /sse + /message  (Claude Desktop, older clients)
+//
+// Clients authenticate by passing their token in the Authorization header.
+func ServeHTTP(binaryName, version string, groups []defs.SpecGroup, authEnvVar string, port int) error {
+	// Use PORT env var if set (Railway, Render, etc.), otherwise use flag value.
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		fmt.Sscanf(envPort, "%d", &port)
+	}
+
+	s := createMCPServer(binaryName, version, authEnvVar, groups)
 
 	// Streamable HTTP transport (Claude Code).
 	streamableSrv := server.NewStreamableHTTPServer(s,
@@ -111,20 +117,112 @@ func ServeHTTP(binaryName, version string, groups []defs.SpecGroup, authEnvVar s
 	return http.ListenAndServe(addr, mux)
 }
 
+// ServeMultiHTTP starts an HTTP server with one MCP server per instance, each under its slug prefix.
+func ServeMultiHTTP(instances []MCPInstance, version string, port int) error {
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		fmt.Sscanf(envPort, "%d", &port)
+	}
+
+	identityBaseURL := getIdentityBaseURL()
+	mcpBaseURL := getMCPBaseURL()
+	addr := fmt.Sprintf(":%d", port)
+
+	mux := http.NewServeMux()
+
+	// Shared OAuth metadata (unauthenticated).
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server", oauthMetadataHandler(identityBaseURL))
+
+	// Discovery index.
+	mux.HandleFunc("GET /", discoveryHandler(instances))
+
+	for _, inst := range instances {
+		mcpSrv := createMCPServer(inst.BinaryName, version, inst.AuthEnvVar, inst.Groups)
+
+		toolCount := 0
+		for _, g := range inst.Groups {
+			toolCount += len(g.Operations)
+		}
+
+		// Streamable HTTP transport.
+		streamableSrv := server.NewStreamableHTTPServer(mcpSrv,
+			server.WithStateLess(true),
+			server.WithHTTPContextFunc(extractBearerToken),
+		)
+
+		// Legacy SSE transport with slug prefix.
+		sseSrv := server.NewSSEServer(mcpSrv,
+			server.WithBaseURL(fmt.Sprintf("http://0.0.0.0%s", addr)),
+			server.WithStaticBasePath("/"+inst.Slug),
+			server.WithSSEContextFunc(extractBearerToken),
+		)
+
+		prefix := "/" + inst.Slug
+		mux.Handle(prefix+"/mcp", authMiddleware(mcpBaseURL, streamableSrv))
+		mux.Handle(prefix+"/sse", authMiddleware(mcpBaseURL, sseSrv.SSEHandler()))
+		mux.Handle(prefix+"/message", authMiddleware(mcpBaseURL, sseSrv.MessageHandler()))
+
+		fmt.Fprintf(os.Stderr, "  [%s] %d tools → %s/{mcp,sse,message}\n", inst.Slug, toolCount, prefix)
+	}
+
+	fmt.Fprintf(os.Stderr, "Multi-config MCP server listening on %s\n", addr)
+	fmt.Fprintf(os.Stderr, "  OAuth metadata: GET /.well-known/oauth-authorization-server\n")
+	fmt.Fprintf(os.Stderr, "  Discovery:      GET /\n")
+	fmt.Fprintf(os.Stderr, "  Identity URL:   %s\n", identityBaseURL)
+	return http.ListenAndServe(addr, mux)
+}
+
+// discoveryHandler returns a handler that serves a JSON index of all MCP server instances.
+func discoveryHandler(instances []MCPInstance) http.HandlerFunc {
+	type endpoint struct {
+		MCP     string `json:"mcp"`
+		SSE     string `json:"sse"`
+		Message string `json:"message"`
+	}
+	type serverInfo struct {
+		Slug       string   `json:"slug"`
+		BinaryName string   `json:"binary_name"`
+		ToolCount  int      `json:"tool_count"`
+		Endpoints  endpoint `json:"endpoints"`
+	}
+	type discovery struct {
+		Servers []serverInfo `json:"servers"`
+	}
+
+	var d discovery
+	for _, inst := range instances {
+		toolCount := 0
+		for _, g := range inst.Groups {
+			toolCount += len(g.Operations)
+		}
+		prefix := "/" + inst.Slug
+		d.Servers = append(d.Servers, serverInfo{
+			Slug:       inst.Slug,
+			BinaryName: inst.BinaryName,
+			ToolCount:  toolCount,
+			Endpoints: endpoint{
+				MCP:     prefix + "/mcp",
+				SSE:     prefix + "/sse",
+				Message: prefix + "/message",
+			},
+		})
+	}
+
+	body, _ := json.Marshal(d)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Write(body)
+	}
+}
+
 // ServeStdio starts a single stdio MCP server with all tools (prefixed).
 func ServeStdio(binaryName, version string, groups []defs.SpecGroup, authEnvVar string) error {
-	s := server.NewMCPServer(binaryName+"-mcp", version, server.WithToolCapabilities(false))
-	for i := range groups {
-		group := &groups[i]
-		for j := range group.Operations {
-			op := &group.Operations[j]
-			toolName := group.Name + "_" + op.OperationID
-			s.AddTools(server.ServerTool{
-				Tool:    buildMCPTool(toolName, op),
-				Handler: makeHandler(op, group, authEnvVar),
-			})
-		}
-	}
+	s := createMCPServer(binaryName, version, authEnvVar, groups)
 	return server.ServeStdio(s)
 }
 

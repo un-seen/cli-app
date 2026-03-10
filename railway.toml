@@ -1,2 +1,2 @@
 [deploy]
-startCommand = "./out mcp server"
+startCommand = "./out mcp server --config-dir=configs"
