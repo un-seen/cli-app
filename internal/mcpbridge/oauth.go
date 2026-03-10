@@ -7,8 +7,30 @@ import (
 	"os"
 )
 
+// protectedResourceMetadataHandler returns a handler for GET /.well-known/oauth-protected-resource.
+// It serves the OAuth 2.0 Protected Resource Metadata (RFC 9728) document,
+// which tells clients where to find the authorization server.
+func protectedResourceMetadataHandler(mcpBaseURL, identityBaseURL string) http.HandlerFunc {
+	metadata := map[string]any{
+		"resource":                mcpBaseURL,
+		"authorization_servers":   []string{identityBaseURL},
+		"bearer_methods_supported": []string{"header"},
+		"scopes_supported":        []string{"read", "write", "admin"},
+	}
+
+	body, _ := json.Marshal(metadata)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Write(body)
+	}
+}
+
 // oauthMetadataHandler returns a handler for GET /.well-known/oauth-authorization-server.
 // It serves the OAuth 2.1 Authorization Server Metadata document pointing to identity-rs.
+// This is served from the MCP server so clients that resolve the AS metadata
+// against mcpBaseURL (rather than the identity server) can still discover endpoints.
 func oauthMetadataHandler(identityBaseURL string) http.HandlerFunc {
 	metadata := map[string]any{
 		"issuer":                                identityBaseURL,
@@ -36,8 +58,8 @@ func oauthMetadataHandler(identityBaseURL string) http.HandlerFunc {
 
 // authMiddleware wraps an HTTP handler to require a Bearer token.
 // If no Authorization header is present, it responds with HTTP 401 and a
-// WWW-Authenticate header pointing to the metadata endpoint, triggering the
-// MCP OAuth discovery flow.
+// WWW-Authenticate header pointing to the Protected Resource Metadata endpoint,
+// triggering the MCP OAuth discovery flow (RFC 9728).
 func authMiddleware(mcpBaseURL string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Allow CORS preflight through.
@@ -52,7 +74,7 @@ func authMiddleware(mcpBaseURL string, next http.Handler) http.Handler {
 		auth := r.Header.Get("Authorization")
 		if auth == "" || len(auth) < 8 {
 			w.Header().Set("WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata="%s/.well-known/oauth-authorization-server"`, mcpBaseURL))
+				fmt.Sprintf(`Bearer resource_metadata="%s/.well-known/oauth-protected-resource"`, mcpBaseURL))
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return

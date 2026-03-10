@@ -102,7 +102,9 @@ func ServeHTTP(binaryName, version string, groups []defs.SpecGroup, authEnvVar s
 	mcpBaseURL := getMCPBaseURL()
 
 	mux := http.NewServeMux()
-	// OAuth metadata discovery (unauthenticated — bootstraps the auth flow).
+	// Protected Resource Metadata (RFC 9728) — tells clients where the auth server is.
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource", protectedResourceMetadataHandler(mcpBaseURL, identityBaseURL))
+	// OAuth AS Metadata — served here so clients resolving against mcpBaseURL can discover endpoints.
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", oauthMetadataHandler(identityBaseURL))
 	// MCP transports wrapped with auth middleware.
 	mux.Handle("/mcp", authMiddleware(mcpBaseURL, streamableSrv))
@@ -112,7 +114,8 @@ func ServeHTTP(binaryName, version string, groups []defs.SpecGroup, authEnvVar s
 	fmt.Fprintf(os.Stderr, "MCP server listening on %s\n", addr)
 	fmt.Fprintf(os.Stderr, "  Streamable HTTP: POST /mcp\n")
 	fmt.Fprintf(os.Stderr, "  Legacy SSE:      GET  /sse + POST /message\n")
-	fmt.Fprintf(os.Stderr, "  OAuth metadata:  GET  /.well-known/oauth-authorization-server\n")
+	fmt.Fprintf(os.Stderr, "  Resource meta:   GET  /.well-known/oauth-protected-resource\n")
+	fmt.Fprintf(os.Stderr, "  OAuth AS meta:   GET  /.well-known/oauth-authorization-server\n")
 	fmt.Fprintf(os.Stderr, "  Identity URL:    %s\n", identityBaseURL)
 	return http.ListenAndServe(addr, mux)
 }
@@ -129,11 +132,13 @@ func ServeMultiHTTP(instances []MCPInstance, version string, port int) error {
 
 	mux := http.NewServeMux()
 
-	// Shared OAuth metadata (unauthenticated).
+	// Protected Resource Metadata (RFC 9728) — tells clients where the auth server is.
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource", protectedResourceMetadataHandler(mcpBaseURL, identityBaseURL))
+	// OAuth AS Metadata — served here so clients resolving against mcpBaseURL can discover endpoints.
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", oauthMetadataHandler(identityBaseURL))
 
-	// Discovery index.
-	mux.HandleFunc("GET /", discoveryHandler(instances))
+	// Discovery index (exact match on root path only).
+	mux.HandleFunc("GET /{$}", discoveryHandler(instances))
 
 	for _, inst := range instances {
 		mcpSrv := createMCPServer(inst.BinaryName, version, inst.AuthEnvVar, inst.Groups)
@@ -165,7 +170,8 @@ func ServeMultiHTTP(instances []MCPInstance, version string, port int) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "Multi-config MCP server listening on %s\n", addr)
-	fmt.Fprintf(os.Stderr, "  OAuth metadata: GET /.well-known/oauth-authorization-server\n")
+	fmt.Fprintf(os.Stderr, "  Resource meta:  GET /.well-known/oauth-protected-resource\n")
+	fmt.Fprintf(os.Stderr, "  OAuth AS meta:  GET /.well-known/oauth-authorization-server\n")
 	fmt.Fprintf(os.Stderr, "  Discovery:      GET /\n")
 	fmt.Fprintf(os.Stderr, "  Identity URL:   %s\n", identityBaseURL)
 	return http.ListenAndServe(addr, mux)
@@ -210,10 +216,6 @@ func discoveryHandler(instances []MCPInstance) http.HandlerFunc {
 	body, _ := json.Marshal(d)
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Write(body)
